@@ -41,16 +41,18 @@ app = Flask(__name__)
 def welcome():
     """List all available api routes."""
     return (
-        f"Available Routes:<br/>"
+        f"Available Hawaii Climate API Routes:<br/>"
         f"/api/v1.0/precipitation<br/>"
         f"/api/v1.0/stations<br/>"
         f"/api/v1.0/tobs<br/>"
         f"/api/v1.0/start<br/>"
-        f"/api/v1.0/start/end"
+        f"/api/v1.0/start/end<br/>"
+        f"Start and End dates should be in the format MMDDYYYY."
     )
 
 @app.route("/api/v1.0/precipitation")
 def precipitation():
+    """Return precipitation from the most recent year"""
     recent_date = session.query(Measurement.date).order_by(Measurement.date.desc()).first()[0]
     # Calculate the date one year from the last date in data set.
     recent_date = recent_date.split('-')
@@ -67,6 +69,7 @@ def precipitation():
 
 @app.route("/api/v1.0/stations")
 def stations():
+    """Return a list of station id and names"""
     results = session.query(Station.id, Station.station).all()
 
     session.close()
@@ -77,6 +80,7 @@ def stations():
 
 @app.route("/api/v1.0/tobs")
 def tobs():
+    """Return temperature observations from the most active station"""
     active_station = session.query(Station.id, Measurement.station, func.count(Measurement.tobs))\
     .filter(Station.station == Measurement.station)\
     .group_by(Measurement.station)\
@@ -96,25 +100,41 @@ def tobs():
 @app.route("/api/v1.0/<start>")
 @app.route("/api/v1.0/<start>/<end>")
 def temp_stats(start=None, end=None):
+    """Return minimum, average, and maximum temperatures between start and end dates"""
 
     recent_date = session.query(Measurement.date).order_by(Measurement.date.desc()).first()[0]
     # Calculate the date one year from the last date in data set.
     recent_date = recent_date.split('-')
     recent_date = [int(recent_date[i]) for i in range(0,len(recent_date))]
     
-    if dt.date(recent_date[0],recent_date[1], recent_date[2]) >= start:
+    
+
+    if not end:
+        start = dt.datetime.strptime(start, "%m%d%Y")
 
         stats = session.query(func.min(Measurement.tobs),func.round(func.avg(Measurement.tobs),1),func.max(Measurement.tobs))\
-        .filter(Measurement.date >= start)\
-        .filter(Measurement.date <= end).all()
+        .filter(Measurement.date >= start).all()
 
         session.close()
 
         temps = list(np.ravel(stats))
-        
+
         return jsonify(temps)
     
-    return jsonify({"error": f"Start date not found"}), 404
+    start = dt.datetime.strptime(start, "%m%d%Y")
+    end = dt.datetime.strptime(end, "%m%d%Y")
+
+    stats = session.query(func.min(Measurement.tobs),func.round(func.avg(Measurement.tobs),1),func.max(Measurement.tobs))\
+    .filter(Measurement.date >= start)\
+    .filter(Measurement.date <= end).all()
+    
+    session.close()
+    
+    temps = list(np.ravel(stats))
+    
+    return jsonify(temps)
+    
+
 
 if __name__ == "__main__":
     app.run(debug=True)
